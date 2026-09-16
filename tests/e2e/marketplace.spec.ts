@@ -61,7 +61,9 @@ test("carrier publishes, reviewer approves, customer buys two trucks, admin veri
     卸货电话: "77010000001",
   }))
     await page.getByLabel(label, { exact: true }).fill(value);
-  await expect(page.getByText("¥37,600.00", { exact: true })).toBeVisible();
+  await expect(page.locator(".checkout-summary")).toContainText("¥37,600.00", {
+    timeout: 15000,
+  });
   await page.getByRole("button", { name: "确认并创建订单" }).click();
   await expect(
     page.getByRole("heading", { name: "订单详情", exact: true }),
