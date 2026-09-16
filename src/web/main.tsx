@@ -634,10 +634,19 @@ function App() {
         <p>
           剩余 {o.remaining_capacity} 台 · 首款 {o.deposit_rate_bps / 100}%
         </p>
-        <p>
-          单车限重 {o.max_weight_kg} kg，尺寸 {o.max_length_cm} ×{" "}
-          {o.max_width_cm} × {o.max_height_cm} cm
-        </p>
+        {o.vehicle_category ? (
+          <p>
+            {o.vehicle_category} · {o.vehicle_model} · {o.line_count}线
+            {o.axle_count}轴 · 有效长度 {o.effective_length_text}
+            {o.effective_length_text === "无标准" ? "" : " 米"} · 有效方数{" "}
+            {o.effective_volume_m3} m³ · 载重 {o.max_weight_kg} kg
+          </p>
+        ) : (
+          <p>
+            单车限重 {o.max_weight_kg} kg，尺寸 {o.max_length_cm} ×{" "}
+            {o.max_width_cm} × {o.max_height_cm} cm
+          </p>
+        )}
         <p className="note">由平台统一承运与履约，供应商身份不对客户公开。</p>
         <button
           className="primary"
@@ -1061,7 +1070,7 @@ function App() {
           <p className="muted">
             {isRoute
               ? "价格变更只影响新订单，已成交订单保留快照。"
-              : "下单时会校验每台车的载重和尺寸上限。"}
+              : "车型目录保留分类、线轴、有效长度、方数和载重；已成交订单保留车型快照。"}
           </p>
           {can && (
             <button onClick={() => edit()}>
@@ -1073,7 +1082,16 @@ function App() {
         {table(
           isRoute
             ? ["编号", "线路", "服务费 / 台", "首款比例", "状态", ""]
-            : ["编号", "车型", "载重", "尺寸（cm）", "状态", ""],
+            : [
+                "编号",
+                "分类 / 车型",
+                "线 / 轴",
+                "有效长度",
+                "有效方数",
+                "载重",
+                "状态",
+                "",
+              ],
           list.map((r: Row) =>
             isRoute
               ? [
@@ -1086,9 +1104,16 @@ function App() {
                 ]
               : [
                   r.code,
-                  r.name,
+                  <>
+                    <strong>{r.category || "原有车型"}</strong>
+                    <small>{r.model_name || r.name}</small>
+                  </>,
+                  r.line_count ? `${r.line_count} / ${r.axle_count}` : "—",
+                  r.effective_length_text
+                    ? `${r.effective_length_text}${r.effective_length_text === "无标准" ? "" : " 米"}`
+                    : `${r.max_length_cm / 100} 米`,
+                  r.effective_volume_m3 ? `${r.effective_volume_m3} m³` : "—",
                   `${r.max_weight_kg} kg`,
-                  `${r.max_length_cm} × ${r.max_width_cm} × ${r.max_height_cm}`,
                   <Badge value={r.status} />,
                   can && <button onClick={() => edit(r)}>编辑</button>,
                 ],
@@ -1411,12 +1436,16 @@ function OrderForm({
             {
               ...field("cargo_width_cm", "每车货物宽度（cm）", "number"),
               min: 1,
-              max: offer.max_width_cm,
+              max: offer.dimension_limits_complete
+                ? offer.max_width_cm
+                : undefined,
             },
             {
               ...field("cargo_height_cm", "每车货物高度（cm）", "number"),
               min: 1,
-              max: offer.max_height_cm,
+              max: offer.dimension_limits_complete
+                ? offer.max_height_cm
+                : undefined,
             },
             field("loading_address", "装货地址"),
             field("loading_contact", "装货联系人"),

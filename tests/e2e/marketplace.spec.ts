@@ -155,3 +155,19 @@ test("M2 carrier confirms, assigns an approved vehicle, reviewer approves and cu
     fullPage: true,
   });
 });
+
+test("admin can view the imported 27-row vehicle catalog", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("邮箱", { exact: true }).fill("admin@example.test");
+  await page.getByLabel("密码（至少 12 位）").fill(password);
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.goto("/admin/master-data/vehicle-types");
+  await expect(page.getByText("TP-COR-5-90", { exact: true })).toBeVisible();
+  await expect(page.getByText("OS-SPLICED", { exact: true })).toBeVisible();
+  await expect(page.getByText("13.6-70 米", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: "test-results/admin-vehicle-catalog.png",
+    fullPage: true,
+  });
+});
