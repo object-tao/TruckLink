@@ -312,7 +312,7 @@ function App() {
             <tr key={i}>
               {row.map((cell, j) => (
                 <td key={j} data-label={headers[j]}>
-                  {cell}
+                  <div className="cell-value">{cell}</div>
                 </td>
               ))}
             </tr>

@@ -764,6 +764,10 @@ footer {
     font-size: 11px;
     text-align: left;
   }
+  .mobile-shell .cell-value {
+    min-width: 0;
+    flex: 1;
+  }
   .app-shell {
     display: block;
   }
