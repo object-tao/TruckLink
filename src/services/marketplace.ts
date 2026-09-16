@@ -4,7 +4,7 @@ import { offerSchema, reviewSchema, orderSchema } from "./validation";
 import { hash } from "./auth";
 
 export const offerJoin = `FROM capacity_offers c JOIN carriers ca ON ca.id=c.carrier_id JOIN routes r ON r.id=c.route_id JOIN cities oc ON oc.id=r.origin_city_id JOIN cities dc ON dc.id=r.destination_city_id JOIN vehicle_types v ON v.id=c.vehicle_type_id`;
-const publicOffer = `c.id,c.offer_no,c.route_id,c.vehicle_type_id,c.loading_date,c.remaining_capacity,c.transit_days_min,c.transit_days_max,c.valid_until,c.status,r.route_code,oc.name AS origin_city,dc.name AS destination_city,v.name AS vehicle_type,v.max_weight_kg,v.max_length_cm,v.max_width_cm,v.max_height_cm,(c.carrier_price_cents+r.service_fee_cents) AS customer_unit_price_cents,r.deposit_rate_bps`;
+const publicOffer = `c.id,c.offer_no,c.route_id,c.vehicle_type_id,c.loading_date,c.remaining_capacity,c.transit_days_min,c.transit_days_max,c.valid_until,c.status,r.route_code,oc.name AS origin_city,dc.name AS destination_city,v.name AS vehicle_type,v.category AS vehicle_category,v.model_name AS vehicle_model,v.line_count,v.axle_count,v.effective_length_text,v.effective_volume_m3,v.dimension_limits_complete,v.max_weight_kg,v.max_length_cm,v.max_width_cm,v.max_height_cm,(c.carrier_price_cents+r.service_fee_cents) AS customer_unit_price_cents,r.deposit_rate_bps`;
 export const available = `c.status='AVAILABLE' AND c.remaining_capacity>0 AND c.valid_until>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND c.loading_date>=date('now') AND ca.status='ACTIVE' AND r.status='ACTIVE' AND v.status='ACTIVE'`;
 export async function searchCapacity(
   db: D1Database,
@@ -190,7 +190,7 @@ export async function createOrder(
   if (previous) return replay(previous);
   const offer = await db
     .prepare(
-      `SELECT c.*,r.service_fee_cents,r.deposit_rate_bps,oc.name||' → '||dc.name AS route_name,v.name AS vehicle_name,v.max_weight_kg,v.max_length_cm,v.max_width_cm,v.max_height_cm ${offerJoin} WHERE c.id=? AND ${available}`,
+      `SELECT c.*,r.service_fee_cents,r.deposit_rate_bps,oc.name||' → '||dc.name AS route_name,v.name AS vehicle_name,v.category AS vehicle_category,v.model_name AS vehicle_model,v.line_count,v.axle_count,v.effective_length_text,v.effective_volume_m3,v.dimension_limits_complete,v.max_weight_kg,v.max_length_cm,v.max_width_cm,v.max_height_cm ${offerJoin} WHERE c.id=? AND ${available}`,
     )
     .bind(data.capacity_offer_id)
     .first<Record<string, any>>();

@@ -265,7 +265,7 @@ app.get("/api/master-data", async (c) => {
     db.prepare("SELECT * FROM countries"),
     db.prepare("SELECT * FROM cities"),
     db.prepare(
-      `SELECT * FROM vehicle_types ${platform.includes(user.role) ? "" : "WHERE status='ACTIVE'"}`,
+      `SELECT * FROM vehicle_types ${platform.includes(user.role) ? "" : "WHERE status='ACTIVE'"} ORDER BY (category IS NULL) DESC,catalog_sequence,code`,
     ),
     db.prepare(
       `SELECT r.*,oc.name AS origin_city,dc.name AS destination_city FROM routes r JOIN cities oc ON oc.id=r.origin_city_id JOIN cities dc ON dc.id=r.destination_city_id ${platform.includes(user.role) ? "" : "WHERE r.status='ACTIVE'"} ORDER BY r.route_code`,

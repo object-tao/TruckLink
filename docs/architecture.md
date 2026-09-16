@@ -55,6 +55,8 @@ M1 的 13 张表之外，M2 增加 vehicles、drivers、transport_events，并�
 
 国家/城市组合外键保证城市归属；路线起终点不能相同。业务主对象 UUID；订单/运力有带日期的可读编号；任务编号为订单编号追加序号。价格整数分，比例 0–10000 bps；数据库约束保证单价、总额、四舍五入首款与尾款的算术一致。
 
+`vehicle_types` 在基础载重和尺寸字段外保存 category、model_name、line_count、axle_count、effective_length_text、effective_volume_m3。业务车型表中的区间和“无标准”均以原文保存；另用解析后的 max_length_cm 支持现有下单校验。导入表没有宽高数据，`dimension_limits_complete=0` 标记这类记录，前端不会把内部兼容值展示为真实宽高规格。
+
 ## 下单事务
 
 1. 会话校验客户角色，读取服务端企业 ID；解析严格 Zod schema，拒绝注入价格或状态字段。
