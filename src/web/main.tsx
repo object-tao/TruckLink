@@ -1472,10 +1472,10 @@ function OrderForm({
             },
             field("loading_address", "装货地址"),
             field("loading_contact", "装货联系人"),
-            field("loading_phone", "装货电话"),
+            field("loading_phone", "装货电话", "tel"),
             field("unloading_address", "卸货地址"),
             field("unloading_contact", "卸货联系人"),
-            field("unloading_phone", "卸货电话"),
+            field("unloading_phone", "卸货电话", "tel"),
             { ...field("cargo_remark", "备注"), required: false },
           ]}
           submit="确认并创建订单"

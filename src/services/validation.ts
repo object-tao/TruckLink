@@ -1,6 +1,12 @@
 import { z } from "zod";
 const text = z.string().trim().min(1).max(200);
-const phone = z.string().trim().min(5).max(30);
+// Contact numbers vary by country and may include short extensions; only
+// require a non-empty value and keep a bounded length.
+const phone = z
+  .string()
+  .trim()
+  .min(1, "联系电话不能为空")
+  .max(30, "联系电话不能超过 30 个字符");
 const money = z.number().int().min(0).max(100000000);
 export const loginSchema = z.object({
   email: z

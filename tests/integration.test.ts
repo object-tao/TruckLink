@@ -310,6 +310,24 @@ test("M1 integration suite", async (t) => {
     "overweight, invalid dimensions and unavailable offers are rejected",
     async () => {
       const id = await offer();
+      const shortPhoneOrder = await request(
+        "/orders",
+        "POST",
+        {
+          ...cargo,
+          capacity_offer_id: id,
+          loading_phone: "1234",
+          unloading_phone: "5678",
+          vehicle_count: 1,
+        },
+        "customer",
+        { "Idempotency-Key": crypto.randomUUID() },
+      );
+      assert.equal(
+        shortPhoneOrder.status,
+        201,
+        JSON.stringify(shortPhoneOrder.body),
+      );
       for (const patch of [
         { cargo_weight_kg: 22001 },
         { cargo_length_cm: 1361 },
