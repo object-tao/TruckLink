@@ -116,7 +116,7 @@ function Form({
               autoComplete={
                 f.type === "password" ? "current-password" : undefined
               }
-              onChange={(event) =>
+              onInput={(event) =>
                 onFieldChange?.(f.key, event.currentTarget.value)
               }
             />
