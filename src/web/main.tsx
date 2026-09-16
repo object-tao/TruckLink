@@ -56,11 +56,13 @@ function Form({
   onSubmit,
   submit = "保存",
   children,
+  onFieldChange,
 }: {
   fields: Field[];
   onSubmit: (data: Row) => Promise<void>;
   submit?: string;
   children?: ReactNode;
+  onFieldChange?: (key: string, value: string) => void;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -113,6 +115,9 @@ function Form({
               step={f.step ?? (f.type === "number" ? "1" : undefined)}
               autoComplete={
                 f.type === "password" ? "current-password" : undefined
+              }
+              onChange={(event) =>
+                onFieldChange?.(f.key, event.currentTarget.value)
               }
             />
           )}
@@ -1396,14 +1401,7 @@ function OrderForm({
   const total = offer.customer_unit_price_cents * count;
   const deposit = Math.floor((total * offer.deposit_rate_bps + 5000) / 10000);
   return (
-    <div
-      className="checkout"
-      onChange={(e) => {
-        const target = e.target as HTMLInputElement;
-        if (target.name === "vehicle_count")
-          setCount(Number(target.value) || 1);
-      }}
-    >
+    <div className="checkout">
       <section className="panel">
         <h2>
           {offer.origin_city} → {offer.destination_city}
@@ -1456,6 +1454,9 @@ function OrderForm({
             { ...field("cargo_remark", "备注"), required: false },
           ]}
           submit="确认并创建订单"
+          onFieldChange={(key, value) => {
+            if (key === "vehicle_count") setCount(Number(value) || 1);
+          }}
           onSubmit={async (x) => {
             const result = await api(
               "/orders",
