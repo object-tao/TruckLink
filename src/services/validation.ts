@@ -96,3 +96,62 @@ export const orderSchema = z
     unloading_phone: phone,
   })
   .strict();
+
+export const vehicleCreateSchema = z
+  .object({
+    plate_number: text,
+    country_id: text,
+    vehicle_type_id: text,
+  })
+  .strict();
+
+export const driverCreateSchema = z
+  .object({
+    name: text,
+    phone,
+    id_number: z.string().trim().min(5).max(80),
+  })
+  .strict();
+
+export const assignmentSchema = z
+  .object({
+    vehicle_id: text,
+    driver_id: text,
+  })
+  .strict();
+
+export const assignmentReviewSchema = z
+  .object({
+    decision: z.enum(["APPROVE", "REJECT"]),
+    reason: z.string().trim().max(500).default(""),
+  })
+  .strict()
+  .refine(
+    (x) => x.decision !== "REJECT" || x.reason.length > 0,
+    "拒绝时请填写原因",
+  );
+
+export const transportEventSchema = z
+  .object({
+    event_type: z.enum([
+      "LOADED",
+      "CUSTOMS_DECLARATION_STARTED",
+      "CUSTOMS_CLEARED",
+      "ENTERED_BORDER_ZONE",
+      "WAITING_EXIT",
+      "CHINA_EXITED",
+      "FOREIGN_ENTERED",
+      "TRANSIT_CUSTOMS",
+      "IN_TRANSIT",
+    ]),
+    event_time: z.iso.datetime().transform((x) => new Date(x).toISOString()),
+    country_id: text.nullish(),
+    city_id: text.nullish(),
+    location_text: text,
+    remark: z.string().trim().max(1000).default(""),
+  })
+  .strict()
+  .refine(
+    (x) => Date.parse(x.event_time) <= Date.now() + 5 * 60 * 1000,
+    "事件时间不能晚于当前时间",
+  );

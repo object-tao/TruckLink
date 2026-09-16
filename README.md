@@ -1,6 +1,6 @@
-# TruckLink · Milestone 1
+# TruckLink · Milestone 2
 
-跨境整车运力平台。已实现车队发布 → 平台审核 → 客户搜索 → 原子下单 → 订单/任务查看。仅开发 M1；当前订单停留在 `PAYMENT_PENDING`，任务停留在 `AWAITING_DEPOSIT`。
+跨境整车运力平台。M1 已实现车队发布 → 平台审核 → 客户搜索 → 原子下单；M2 新增车队确认、车辆/司机档案、任务派车与平台审核、运输节点和客户脱敏轨迹。付款仍属于 M3，正常新订单会停留在 `PAYMENT_PENDING`，本地 seed 另含一笔已进入履约阶段的演示订单。
 
 线上：https://trucklink.obiecrm-ab8ac7.workers.dev
 
@@ -24,7 +24,7 @@ npm run dev
 
 开发账号（仅本地）：`admin@example.test`、`customer@example.test`、`customer-b@example.test`、`carrier@example.test`、`reviewer@example.test`、`operations@example.test`、`finance@example.test`。统一开发密码：`TruckLink-Dev-2026!`。
 
-本地 seed 创建 6 国、7 城市、3 车型、3 线路及 Carrier A / Customer A，运力为未来 7 天、5 台、18,000 元/台，初始待审核。重复 seed 不覆盖现有记录，不重置已销售库存。生产迁移仅写基础国家/城市/车型/线路；绝不执行 demo seed。
+本地 seed 创建 6 国、7 城市、3 车型、3 线路及 Carrier A / Customer A，含 M1 待审核运力和 M2 待车队确认演示订单 `TL-M2-DEMO`、已审核车辆、司机。重复 seed 不覆盖现有记录，不重置已销售库存。生产迁移仅写基础国家/城市/车型/线路；绝不执行 demo seed。
 
 ## 验证
 
@@ -40,7 +40,7 @@ npm run test:e2e
 
 Windows 可设置 `PLAYWRIGHT_CHROME_PATH` 使用已有 Chrome。浏览器测试仅操作本地测试数据库，并在 `test-results/` 输出桌面/手机截图。每次测试创建独立运力，不依赖之前测试的订单。
 
-集成测试使用真实 Miniflare D1 数据库，包含需求第 59 节的金额/库存/两任务案例、并发最后一台、重复请求幂等、事务故障注入、超限拦截、过期运力、快照不可变、越权与 CSRF、入驻及会话注销。测试运行器固定 Miniflare 4（兼容日 2026-08-06）；生产和浏览器测试使用 Wrangler 4 当前运行时。测试依赖中的 sharp/undici 已锁定安全修补版本。
+集成测试使用真实 Miniflare D1 数据库，覆盖需求第 59 节的金额/库存/两任务案例、并发和事务回滚，以及 M2 的租户隔离、车队确认、多任务聚合、换车重审、运输节点顺序/幂等、客户轨迹脱敏和审计。测试运行器固定 Miniflare 4（兼容日 2026-08-06）；生产和浏览器测试使用 Wrangler 4 当前运行时。
 
 ## 生产发布与账号
 
@@ -57,12 +57,12 @@ Session 随机令牌只以 SHA-256 摘要存库，Cookie 为 HttpOnly / SameSite
 ## 页面
 
 - 公共登录/注册：`/login`（`/carrier/login`、`/admin/login` 同样进入登录）
-- 客户：`/home`、`/routes/search`、`/capacity/list`、`/capacity/:id`、`/company/setup`、`/order/create?offer=:id`、`/orders`、`/orders/:id`、`/profile`
-- 车队 H5：`/carrier/home`、`/carrier/onboarding`、`/carrier/capacity`、`/carrier/capacity/create`
-- 后台：`/admin/dashboard`、`/admin/orders`、`/admin/orders/:id`、`/admin/capacity`、`/admin/reviews/capacity`、`/admin/carriers`、`/admin/routes`、`/admin/master-data/vehicle-types`、`/admin/users`、`/admin/audit-logs`
+- 客户：`/home`、`/capacity/:id`、`/company/setup`、`/order/create?offer=:id`、`/orders`、`/orders/:id`、`/orders/:id/tracking`、`/profile`
+- 车队 H5：`/carrier/home`、`/carrier/orders`、`/carrier/orders/:id`、`/carrier/tasks/:id/vehicle`、`/carrier/tasks/:id/events`、`/carrier/vehicles`、`/carrier/drivers`、`/carrier/capacity`、`/carrier/capacity/create`
+- 后台：`/admin/dashboard`、`/admin/orders`、`/admin/tasks`、`/admin/tasks/:id`、`/admin/vehicles`、`/admin/capacity`、`/admin/carriers`、`/admin/routes`、`/admin/master-data/vehicle-types`、`/admin/users`、`/admin/audit-logs`
 
 ## 边界与后续
 
-M1 不包含付款凭证/确认到账、车辆/司机/派车、运输节点、取消退款、自动释放未支付库存、结算、附加费、罚款、发票、资质附件上传或微信原生小程序。当前未支付订单占用库存，不自动过期释放，避免无业务规则情况下错误恢复库存。列表按最近 100 条返回；规模扩大时增加游标分页。没有邮件验证、邮件找回密码或多成员邀请，后续身份治理阶段补齐。
+M2 不包含付款凭证/确认到账、取消退款、自动释放未支付库存、结算、附加费、罚款、发票、资质附件上传或微信原生小程序。当前未支付订单占用库存，不自动过期释放。列表按最近 100 条返回；规模扩大时增加游标分页。
 
-下一阶段为 M2：车队确认订单、Vehicle/Driver、OrderTask 车辆绑定与审核、运输节点；保留付款功能到 M3，不伪造付款完成状态。
+下一阶段为 M3 Payments：首款、银行转账凭证、财务确认、尾款和应收。M2 没有新增绕过付款的公开端点。

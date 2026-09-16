@@ -13,7 +13,7 @@ export function audit(
   return db
     .prepare(
       "INSERT INTO audit_logs(id,operator_type,operator_id,module,object_type,object_id,action,before_data,after_data,ip_address) SELECT ?,?,?,?,?,?,?,?,?,?" +
-        (conditional ? " WHERE changes()=1" : ""),
+        (conditional ? " WHERE changes()>0" : ""),
     )
     .bind(
       crypto.randomUUID(),

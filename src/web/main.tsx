@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { api, money, labels } from "./api";
+import { FulfillmentView, isFulfillmentPath } from "./fulfillment";
 import type { User } from "../api/types";
 import "./styles.css";
 type Row = Record<string, any>;
@@ -169,7 +170,9 @@ function App() {
       ? "/home"
       : u.role === "CARRIER"
         ? "/carrier/home"
-        : "/admin/dashboard";
+        : u.role === "REVIEWER"
+          ? "/admin/tasks"
+          : "/admin/dashboard";
   useEffect(() => {
     if (user && (path === "/" || path.endsWith("/login"))) navigate(home(user));
   }, [user, path]);
@@ -187,6 +190,8 @@ function App() {
       if (user!.role === "CUSTOMER") {
         if (path === "/company/setup") result = await api("/company");
         else if (path === "/orders") result = await api("/orders");
+        else if (/^\/orders\/[^/]+\/tracking$/.test(path))
+          result = await api(`/orders/${path.split("/")[2]}/tracking`);
         else if (path.startsWith("/orders/"))
           result = await api(`/orders/${path.split("/")[2]}`);
         else if (path.startsWith("/capacity/") && path !== "/capacity/list")
@@ -198,23 +203,41 @@ function App() {
         else result = await api("/capacity" + location.search);
       } else if (user!.role === "CARRIER") {
         const profile = await api("/carrier/profile");
-        result = { ...profile, ...(await api("/carrier/capacity")) };
+        const endpoint = path.startsWith("/carrier/orders/")
+          ? `/carrier/orders/${path.split("/")[3]}`
+          : path === "/carrier/orders" || path === "/carrier/home"
+            ? "/carrier/orders"
+            : path === "/carrier/vehicles"
+              ? "/carrier/vehicles"
+              : path === "/carrier/drivers"
+                ? "/carrier/drivers"
+                : path.startsWith("/carrier/tasks/")
+                  ? `/carrier/tasks/${path.split("/")[3]}`
+                  : "/carrier/capacity";
+        result = { ...profile, ...(await api(endpoint)) };
       } else {
         const endpoint = path.startsWith("/admin/orders/")
           ? `/admin/orders/${path.split("/")[3]}`
-          : path.includes("audit-logs")
-            ? "/admin/audit-logs"
-            : path.includes("/users")
-              ? "/admin/users"
-              : path.includes("customers")
-                ? "/admin/customers"
-                : path.includes("carriers")
-                  ? "/admin/carriers"
-                  : path.includes("capacity") || user!.role === "REVIEWER"
-                    ? "/admin/capacity"
-                    : path.includes("routes") || path.includes("vehicle-types")
-                      ? null
-                      : "/admin/orders";
+          : path.startsWith("/admin/tasks/")
+            ? `/admin/tasks/${path.split("/")[3]}`
+            : path === "/admin/tasks"
+              ? "/admin/tasks"
+              : path === "/admin/vehicles"
+                ? "/admin/vehicles"
+                : path.includes("audit-logs")
+                  ? "/admin/audit-logs"
+                  : path.includes("/users")
+                    ? "/admin/users"
+                    : path.includes("customers")
+                      ? "/admin/customers"
+                      : path.includes("carriers")
+                        ? "/admin/carriers"
+                        : path.includes("capacity")
+                          ? "/admin/capacity"
+                          : path.includes("routes") ||
+                              path.includes("vehicle-types")
+                            ? null
+                            : "/admin/orders";
         if (endpoint) result = await api(endpoint);
       }
       if (alive) setData(result);
@@ -265,6 +288,9 @@ function App() {
     : carrier
       ? [
           ["/carrier/home", "工作台", LayoutDashboard],
+          ["/carrier/orders", "待履约订单", ClipboardList],
+          ["/carrier/vehicles", "车辆管理", Truck],
+          ["/carrier/drivers", "司机管理", Users],
           ["/carrier/capacity", "我的运力", Truck],
           ["/carrier/capacity/create", "发布运力", Plus],
           ["/carrier/onboarding", "车队资料", Users],
@@ -277,6 +303,8 @@ function App() {
                 ["/admin/orders", "订单管理", ClipboardList],
               ]
             : []),
+          ["/admin/tasks", "履约任务", ClipboardList],
+          ["/admin/vehicles", "车辆审核", Truck],
           ["/admin/capacity", "运力审核", ShieldCheck],
           ["/admin/carriers", "车队管理", Truck],
           ["/admin/routes", "线路管理", Route],
@@ -289,14 +317,24 @@ function App() {
             : []),
           ["/profile", "账户设置", Settings],
         ];
-  const title =
-    path.startsWith("/orders/") || path.startsWith("/admin/orders/")
-      ? "订单详情"
-      : path.startsWith("/capacity/") && path !== "/capacity/list"
-        ? "运力详情"
-        : path === "/order/create"
-          ? "确认运输需求"
-          : ((links.find((x) => x[0] === path)?.[1] as string) ?? "运力市场");
+  const title = path.endsWith("/tracking")
+    ? "运输轨迹"
+    : path.startsWith("/carrier/tasks/") && path.endsWith("/vehicle")
+      ? "车辆绑定"
+      : path.startsWith("/carrier/tasks/") && path.endsWith("/events")
+        ? "运输节点"
+        : path.startsWith("/admin/tasks/")
+          ? "履约任务详情"
+          : path.startsWith("/orders/") ||
+              path.startsWith("/admin/orders/") ||
+              path.startsWith("/carrier/orders/")
+            ? "订单详情"
+            : path.startsWith("/capacity/") && path !== "/capacity/list"
+              ? "运力详情"
+              : path === "/order/create"
+                ? "确认运输需求"
+                : ((links.find((x) => x[0] === path)?.[1] as string) ??
+                  "运力市场");
   const table = (headers: string[], rows: ReactNode[][]) => (
     <div className="table-wrap">
       <table>
@@ -426,6 +464,17 @@ function App() {
   }
   let content: ReactNode;
   if (path === "/profile") content = profile();
+  else if (isFulfillmentPath(user.role, path))
+    content = (
+      <FulfillmentView
+        role={user.role}
+        path={path}
+        data={data}
+        master={master}
+        navigate={navigate}
+        refresh={refresh}
+      />
+    );
   else if (data.order) {
     const o = data.order;
     content = (
@@ -465,6 +514,14 @@ function App() {
           <p className="note">
             订单已创建，价格已锁定。收付款功能将在后续阶段开放。
           </p>
+          {customer && (
+            <button
+              className="text-button"
+              onClick={() => navigate(`/orders/${o.id}/tracking`)}
+            >
+              查看运输轨迹 <ArrowRight size={15} />
+            </button>
+          )}
           <div className="detail-grid">
             <div>
               <h3>装货信息</h3>

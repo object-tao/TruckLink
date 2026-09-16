@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { seedStatements, demoPassword } from "./seed-data";
+import { seedStatements, m2SeedStatements, demoPassword } from "./seed-data";
 if (process.argv.includes("--remote"))
   throw new Error(
     "Demo seed is local-only. Use bootstrap-admin.ts for production.",
@@ -11,7 +11,7 @@ const literal = (value: unknown) =>
     : typeof value === "number"
       ? String(value)
       : `'${String(value).replaceAll("'", "''")}'`;
-const queries = await seedStatements();
+const queries = [...(await seedStatements()), ...m2SeedStatements()];
 const sql = queries
   .map(({ sql, args }) => {
     let index = 0;

@@ -15,7 +15,7 @@ for (let attempt = 1; attempt <= 12; attempt++) {
     assert.equal(body.status, "ok");
     assert.equal(body.service, "trucklink");
     assert.equal(body.commit, commit, "Deployed revision does not match");
-    assert.equal(body.milestone, 1);
+    assert.equal(body.milestone, 2);
     const page = await fetch(new URL("/login", base), {
       signal: AbortSignal.timeout(10000),
     });
