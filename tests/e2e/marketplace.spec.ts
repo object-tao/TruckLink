@@ -82,6 +82,10 @@ test("carrier publishes, reviewer approves, customer buys two trucks, admin veri
   await login("carrier");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "工作台" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Carrier A", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("正在加载最新数据…")).toHaveCount(0);
   await page.screenshot({
     path: "test-results/carrier-mobile.png",
     fullPage: true,
