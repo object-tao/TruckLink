@@ -41,6 +41,7 @@
 | GET        | /admin/customers                   | 客户列表                                                              |
 | POST / PUT | /admin/routes[/:id]                | SUPER_ADMIN/OPERATIONS 创建/修改线路                                  |
 | POST / PUT | /admin/vehicle-types[/:id]         | SUPER_ADMIN/OPERATIONS 创建/修改车型                                  |
+| DELETE     | /admin/vehicle-types/:id            | SUPER_ADMIN/OPERATIONS 删除未被运力或车辆引用的车型；有引用返回 409    |
 | GET / POST | /admin/users                       | SUPER_ADMIN 查看成员/创建 OPERATIONS、REVIEWER、FINANCE               |
 | GET        | /admin/audit-logs                  | SUPER_ADMIN 最近 100 条审计                                           |
 
