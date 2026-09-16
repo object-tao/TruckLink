@@ -25,6 +25,17 @@ import {
   customerOrder,
   offerJoin,
 } from "../services/marketplace";
+import {
+  addTransportEvent,
+  assignTask,
+  carrierOrder,
+  confirmCarrierOrder,
+  createDriver,
+  createVehicle,
+  reviewAssignment,
+  reviewVehicle,
+  taskDetailSql,
+} from "../services/fulfillment";
 
 const app = new Hono<AppEnv>();
 const userFields = "id,email,display_name,role,customer_company_id,carrier_id";
@@ -92,7 +103,7 @@ app.get("/health", async (c) => {
   return c.json({
     status: "ok",
     service: "trucklink",
-    milestone: 1,
+    milestone: 2,
     commit: c.env.DEPLOY_COMMIT ?? "local",
   });
 });
@@ -391,6 +402,186 @@ app.post("/api/carrier/capacity", async (c) => {
     201,
   );
 });
+app.get("/api/carrier/orders", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  const rows = await c.env.DB.prepare(
+    "SELECT * FROM orders WHERE carrier_id=? AND status<>'PAYMENT_PENDING' ORDER BY created_at DESC LIMIT 100",
+  )
+    .bind(u.carrier_id ?? "")
+    .all();
+  return c.json({
+    items: (rows.results as Record<string, unknown>[]).map(carrierOrder),
+  });
+});
+app.get("/api/carrier/orders/:id", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  const row = await c.env.DB.prepare(
+    "SELECT * FROM orders WHERE id=? AND carrier_id=? AND status<>'PAYMENT_PENDING'",
+  )
+    .bind(c.req.param("id"), u.carrier_id ?? "")
+    .first<Record<string, unknown>>();
+  if (!row) throw new Problem(404, "订单不存在");
+  const tasks = await c.env.DB.prepare(
+    `${taskDetailSql} WHERE o.id=? AND o.carrier_id=? ORDER BY t.sequence`,
+  )
+    .bind(row.id, u.carrier_id ?? "")
+    .all();
+  return c.json({ order: carrierOrder(row), tasks: tasks.results });
+});
+app.post("/api/carrier/orders/:id/confirm", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  return c.json(
+    await confirmCarrierOrder(
+      c.env.DB,
+      u,
+      c.req.param("id"),
+      c.req.header("cf-connecting-ip") ?? null,
+    ),
+  );
+});
+app.get("/api/carrier/vehicles", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  return c.json({
+    items: (
+      await c.env.DB.prepare(
+        "SELECT v.*,vt.name AS vehicle_type,co.name AS country_name FROM vehicles v JOIN vehicle_types vt ON vt.id=v.vehicle_type_id JOIN countries co ON co.id=v.country_id WHERE v.carrier_id=? ORDER BY v.created_at DESC",
+      )
+        .bind(u.carrier_id ?? "")
+        .all()
+    ).results,
+  });
+});
+app.post("/api/carrier/vehicles", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  return c.json(
+    await createVehicle(
+      c.env.DB,
+      u,
+      await c.req.json(),
+      c.req.header("cf-connecting-ip") ?? null,
+    ),
+    201,
+  );
+});
+app.get("/api/carrier/drivers", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  const rows = (
+    await c.env.DB.prepare(
+      "SELECT id,name,phone,id_number,status,created_at FROM drivers WHERE carrier_id=? ORDER BY created_at DESC",
+    )
+      .bind(u.carrier_id ?? "")
+      .all()
+  ).results as Record<string, any>[];
+  return c.json({
+    items: rows.map((x) => ({
+      ...x,
+      id_number_masked:
+        x.id_number.length > 4
+          ? "*".repeat(Math.min(10, x.id_number.length - 4)) +
+            x.id_number.slice(-4)
+          : x.id_number,
+      id_number: undefined,
+    })),
+  });
+});
+app.post("/api/carrier/drivers", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  return c.json(
+    await createDriver(
+      c.env.DB,
+      u,
+      await c.req.json(),
+      c.req.header("cf-connecting-ip") ?? null,
+    ),
+    201,
+  );
+});
+app.get("/api/carrier/tasks/:id", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  const task = await c.env.DB.prepare(
+    `${taskDetailSql} WHERE t.id=? AND o.carrier_id=?`,
+  )
+    .bind(c.req.param("id"), u.carrier_id ?? "")
+    .first();
+  if (!task) throw new Problem(404, "任务不存在");
+  const [vehicles, drivers, events] = await Promise.all([
+    c.env.DB.prepare(
+      "SELECT v.id,v.plate_number,v.status,v.vehicle_type_id,vt.name AS vehicle_type FROM vehicles v JOIN vehicle_types vt ON vt.id=v.vehicle_type_id WHERE v.carrier_id=? AND v.status IN ('PENDING_REVIEW','ACTIVE') ORDER BY v.created_at DESC",
+    )
+      .bind(u.carrier_id ?? "")
+      .all(),
+    c.env.DB.prepare(
+      "SELECT id,name,phone,status FROM drivers WHERE carrier_id=? AND status='ACTIVE' ORDER BY created_at DESC",
+    )
+      .bind(u.carrier_id ?? "")
+      .all(),
+    c.env.DB.prepare(
+      "SELECT e.id,e.event_type,e.event_time,e.location_text,e.remark,co.name AS country_name,ci.name AS city_name FROM transport_events e LEFT JOIN countries co ON co.id=e.country_id LEFT JOIN cities ci ON ci.id=e.city_id WHERE e.order_task_id=? ORDER BY e.event_time,e.created_at",
+    )
+      .bind(c.req.param("id"))
+      .all(),
+  ]);
+  return c.json({
+    task,
+    vehicles: vehicles.results,
+    drivers: drivers.results,
+    events: events.results,
+  });
+});
+app.post("/api/carrier/tasks/:id/assignment", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  return c.json(
+    await assignTask(
+      c.env.DB,
+      u,
+      c.req.param("id"),
+      await c.req.json(),
+      c.req.header("cf-connecting-ip") ?? null,
+    ),
+  );
+});
+app.get("/api/carrier/tasks/:id/events", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  const task = await c.env.DB.prepare(
+    `${taskDetailSql} WHERE t.id=? AND o.carrier_id=?`,
+  )
+    .bind(c.req.param("id"), u.carrier_id ?? "")
+    .first();
+  if (!task) throw new Problem(404, "任务不存在");
+  return c.json({
+    task,
+    items: (
+      await c.env.DB.prepare(
+        "SELECT e.id,e.event_type,e.event_time,e.location_text,e.remark,co.name AS country_name,ci.name AS city_name FROM transport_events e LEFT JOIN countries co ON co.id=e.country_id LEFT JOIN cities ci ON ci.id=e.city_id WHERE e.order_task_id=? ORDER BY e.event_time,e.created_at",
+      )
+        .bind(c.req.param("id"))
+        .all()
+    ).results,
+  });
+});
+app.post("/api/carrier/tasks/:id/events", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CARRIER"]);
+  const result = await addTransportEvent(
+    c.env.DB,
+    u,
+    c.req.param("id"),
+    await c.req.json(),
+    c.req.header("Idempotency-Key") ?? null,
+    c.req.header("cf-connecting-ip") ?? null,
+  );
+  return c.json(result, result.replayed ? 200 : 201);
+});
 app.post("/api/orders", async (c) => {
   const u = c.get("user");
   roles(u, ["CUSTOMER"]);
@@ -423,11 +614,32 @@ app.get("/api/orders/:id", async (c) => {
     .first();
   if (!row) throw new Problem(404, "订单不存在");
   const tasks = await c.env.DB.prepare(
-    "SELECT * FROM order_tasks WHERE order_id=? ORDER BY sequence",
+    "SELECT id,task_no,status,planned_loading_date,loaded_at,departed_at,arrived_at,unloaded_at FROM order_tasks WHERE order_id=? ORDER BY sequence",
   )
     .bind(row.id)
     .all();
   return c.json({ order: customerOrder(row), tasks: tasks.results });
+});
+app.get("/api/orders/:id/tracking", async (c) => {
+  const u = c.get("user");
+  roles(u, ["CUSTOMER"]);
+  const order = await c.env.DB.prepare(
+    "SELECT id,order_no,route_snapshot,status,planned_loading_date FROM orders WHERE id=? AND customer_company_id=?",
+  )
+    .bind(c.req.param("id"), u.customer_company_id ?? "")
+    .first();
+  if (!order) throw new Problem(404, "订单不存在");
+  const tasks = await c.env.DB.prepare(
+    "SELECT id,task_no,status,planned_loading_date,loaded_at,departed_at FROM order_tasks WHERE order_id=? ORDER BY sequence",
+  )
+    .bind(order.id)
+    .all();
+  const events = await c.env.DB.prepare(
+    "SELECT e.id,e.order_task_id,e.event_type,e.event_time,e.location_text,e.remark,co.name AS country_name,ci.name AS city_name FROM transport_events e JOIN order_tasks t ON t.id=e.order_task_id LEFT JOIN countries co ON co.id=e.country_id LEFT JOIN cities ci ON ci.id=e.city_id WHERE t.order_id=? ORDER BY e.event_time,e.created_at",
+  )
+    .bind(order.id)
+    .all();
+  return c.json({ order, tasks: tasks.results, events: events.results });
 });
 app.use("/api/admin/*", async (c, next) => {
   roles(c.get("user"), platform);
@@ -476,6 +688,79 @@ app.post("/api/admin/capacity/:id/review", async (c) => {
       c.req.header("cf-connecting-ip") ?? null,
     ),
   );
+});
+app.get("/api/admin/vehicles", async (c) =>
+  c.json({
+    items: (
+      await c.env.DB.prepare(
+        "SELECT v.*,ca.company_name,vt.name AS vehicle_type,co.name AS country_name FROM vehicles v JOIN carriers ca ON ca.id=v.carrier_id JOIN vehicle_types vt ON vt.id=v.vehicle_type_id JOIN countries co ON co.id=v.country_id ORDER BY v.created_at DESC LIMIT 100",
+      ).all()
+    ).results,
+  }),
+);
+app.post("/api/admin/vehicles/:id/review", async (c) => {
+  roles(c.get("user"), reviewers);
+  return c.json(
+    await reviewVehicle(
+      c.env.DB,
+      c.get("user"),
+      c.req.param("id"),
+      await c.req.json(),
+      c.req.header("cf-connecting-ip") ?? null,
+    ),
+  );
+});
+app.get("/api/admin/tasks", async (c) => {
+  roles(c.get("user"), ["SUPER_ADMIN", "OPERATIONS", "REVIEWER"]);
+  return c.json({
+    items: (
+      await c.env.DB.prepare(
+        `${taskDetailSql} JOIN carriers ca ON ca.id=o.carrier_id ORDER BY t.updated_at DESC LIMIT 100`,
+      ).all()
+    ).results,
+  });
+});
+app.get("/api/admin/tasks/:id", async (c) => {
+  roles(c.get("user"), ["SUPER_ADMIN", "OPERATIONS", "REVIEWER"]);
+  const task = await c.env.DB.prepare(`${taskDetailSql} WHERE t.id=?`)
+    .bind(c.req.param("id"))
+    .first();
+  if (!task) throw new Problem(404, "任务不存在");
+  return c.json({
+    task,
+    events: (
+      await c.env.DB.prepare(
+        "SELECT e.*,co.name AS country_name,ci.name AS city_name FROM transport_events e LEFT JOIN countries co ON co.id=e.country_id LEFT JOIN cities ci ON ci.id=e.city_id WHERE e.order_task_id=? ORDER BY e.event_time,e.created_at",
+      )
+        .bind(c.req.param("id"))
+        .all()
+    ).results,
+  });
+});
+app.post("/api/admin/tasks/:id/assignment-review", async (c) => {
+  roles(c.get("user"), reviewers);
+  return c.json(
+    await reviewAssignment(
+      c.env.DB,
+      c.get("user"),
+      c.req.param("id"),
+      await c.req.json(),
+      c.req.header("cf-connecting-ip") ?? null,
+    ),
+  );
+});
+app.post("/api/admin/tasks/:id/events", async (c) => {
+  const u = c.get("user");
+  roles(u, ["SUPER_ADMIN", "OPERATIONS"]);
+  const result = await addTransportEvent(
+    c.env.DB,
+    u,
+    c.req.param("id"),
+    await c.req.json(),
+    c.req.header("Idempotency-Key") ?? null,
+    c.req.header("cf-connecting-ip") ?? null,
+  );
+  return c.json(result, result.replayed ? 200 : 201);
 });
 app.get("/api/admin/orders", async (c) => {
   roles(c.get("user"), ["SUPER_ADMIN", "OPERATIONS", "FINANCE"]);

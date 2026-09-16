@@ -36,6 +36,7 @@ test("carrier publishes, reviewer approves, customer buys two trucks, admin veri
   const offer = await (await created).json();
   expect(offer.id).toBeTruthy();
   await login("reviewer");
+  await page.goto("/admin/capacity");
   const row = page.getByRole("row").filter({ hasText: offer.offer_no });
   await row.getByRole("button", { name: "处理审核" }).click();
   await page.getByLabel("审核结果").selectOption("APPROVE");
@@ -83,7 +84,7 @@ test("carrier publishes, reviewer approves, customer buys two trucks, admin veri
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "工作台" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Carrier A", exact: true }),
+    page.getByText("待车队确认", { exact: true }).first(),
   ).toBeVisible();
   await expect(page.getByText("正在加载最新数据…")).toHaveCount(0);
   await page.screenshot({
@@ -103,4 +104,54 @@ test("carrier publishes, reviewer approves, customer buys two trucks, admin veri
     fullPage: true,
   });
   expect(errors).toEqual([]);
+});
+
+test("M2 carrier confirms, assigns an approved vehicle, reviewer approves and customer tracks", async ({
+  page,
+}) => {
+  async function login(role: string) {
+    await page.context().clearCookies();
+    await page.goto("/login");
+    await page.getByLabel("邮箱", { exact: true }).fill(`${role}@example.test`);
+    await page.getByLabel("密码（至少 12 位）").fill(password);
+    await page.getByRole("button", { name: "登录", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  }
+
+  await login("carrier");
+  await page.goto("/carrier/orders/m2-demo-order");
+  await page.getByRole("button", { name: "确认承运" }).click();
+  await expect(
+    page.getByText("待绑定车辆", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "绑定车辆" }).click();
+  await page.getByLabel("车辆").selectOption("demo-vehicle");
+  await page.getByLabel("司机").selectOption("demo-driver");
+  await page.getByRole("button", { name: "提交车辆绑定" }).click();
+  await expect(
+    page.getByText("车辆待审核", { exact: true }).first(),
+  ).toBeVisible();
+
+  await login("reviewer");
+  await page.goto("/admin/tasks/m2-demo-task");
+  await expect(page.getByText("新A·TL001", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "提交审核" }).click();
+  await expect(page.getByText("待装货", { exact: true }).first()).toBeVisible();
+
+  await login("carrier");
+  await page.goto("/carrier/tasks/m2-demo-task/events");
+  await page.getByLabel("具体位置").fill("霍尔果斯装货区");
+  await page.getByRole("button", { name: "记录运输节点" }).click();
+  await expect(page.getByText("已装货", { exact: true }).first()).toBeVisible();
+
+  await login("customer");
+  await page.goto("/orders/m2-demo-order/tracking");
+  await expect(page.getByRole("heading", { name: "运输轨迹" })).toBeVisible();
+  await expect(page.getByText(/霍尔果斯装货区/)).toBeVisible();
+  await expect(page.getByText("新A·TL001")).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: "test-results/customer-tracking.png",
+    fullPage: true,
+  });
 });

@@ -1,4 +1,4 @@
-# M1 架构与数据库
+# M1–M2 架构与数据库
 
 ## 现有项目与选型
 
@@ -31,6 +31,11 @@ erDiagram
  User ||--o{ Order : creates
  CapacityOffer ||--o{ Order : reserves
  Order ||--|{ OrderTask : splits
+ Carrier ||--o{ Vehicle : owns
+ Carrier ||--o{ Driver : employs
+ Vehicle ||--o{ OrderTask : assigned
+ Driver ||--o{ OrderTask : drives
+ OrderTask ||--o{ TransportEvent : records
  User ||--o{ AuditLog : operates
 ```
 
@@ -38,7 +43,15 @@ erDiagram
 
 ## 表与约束
 
-13 张表：countries、cities、customer_companies、carriers、users、sessions、auth_limits、vehicle_types、routes、capacity_offers、orders、order_tasks、audit_logs（国家、城市作为字典）。所有可变业务主表均有 created_at/updated_at。字典不提供删除 API；线路/车型使用状态停用，订单与审计不提供删除 API。
+M1 的 13 张表之外，M2 增加 vehicles、drivers、transport_events，并扩展 orders/order_tasks 的履约字段。所有可变业务主表均有 created_at/updated_at。字典不提供删除 API；线路/车型使用状态停用，订单、任务和审计不提供删除 API。
+
+## M2 履约状态与事务
+
+`CARRIER_CONFIRM_PENDING → VEHICLE_ASSIGN_PENDING → VEHICLE_REVIEW_PENDING → READY_FOR_LOADING → LOADED → IN_TRANSIT`。车队确认会同步更新订单下所有任务；每个任务绑定同车队、同车型的 Vehicle 和 ACTIVE Driver。任何换车都会增加 `assignment_version` 并返回车辆审核，避免并发审核旧版本。只有所有任务均审核通过、均装货、均进入运输中时，订单才分别聚合到对应状态。
+
+车辆独立执行资质审核。任务审核只接受 ACTIVE 车辆；因此车队可先提交新车并预绑定，但必须等车辆资质和任务绑定都通过才能装货。`assignment_due_at` 由计划装货日减 48 小时计算并在工作台展示。
+
+运输事件以 `(operator_id, idempotency_key)` 唯一，另存请求 SHA-256；同键同载荷安全重放，同键不同载荷返回 409。事件先要求任务已通过绑定审核，首次 `LOADED` 将任务推进到已装货，后续跨境节点推进到运输中。客户轨迹只返回任务业务编号、状态、时间和地点，不返回车牌、司机、操作人或车队成本。
 
 国家/城市组合外键保证城市归属；路线起终点不能相同。业务主对象 UUID；订单/运力有带日期的可读编号；任务编号为订单编号追加序号。价格整数分，比例 0–10000 bps；数据库约束保证单价、总额、四舍五入首款与尾款的算术一致。
 
@@ -60,10 +73,10 @@ erDiagram
 | 角色        | 范围                                                        |
 | ----------- | ----------------------------------------------------------- |
 | CUSTOMER    | 自己企业、匿名市场、自己企业订单                            |
-| CARRIER     | 自己车队档案、发布和查看自己运力                            |
+| CARRIER     | 自己车队档案、运力、订单、车辆司机、任务绑定与运输节点      |
 | SUPER_ADMIN | 所有 M1 管理功能、平台成员、审计                            |
 | OPERATIONS  | 订单/客户/车队/运力查看、线路和车型维护，不审核、不确认付款 |
-| REVIEWER    | 查看并审核车队/运力，不能查看订单成本详情                   |
+| REVIEWER    | 审核车队、运力、车辆及任务绑定，不能查看客户订单成本详情    |
 | FINANCE     | 订单与基础数据只读，M1 没有付款确认端点                     |
 
 客户序列化白名单隐藏车队 ID、车队成本与平台服务费。CSRF 由 SameSite、Origin 和自定义请求头共同防护；无跨域 CORS 开放。所有 SQL 参数使用绑定，不拼接用户值。

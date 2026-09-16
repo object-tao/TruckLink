@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "check": "tsc --noEmit",
-    "test": "tsx --test tests/integration.test.ts",
+    "test": "tsx --test tests/*.test.ts",
     "build": "vite build && wrangler deploy --dry-run --outdir dist/worker",
     "deploy": "vite build && wrangler deploy",
     "smoke": "node scripts/smoke.mjs",
