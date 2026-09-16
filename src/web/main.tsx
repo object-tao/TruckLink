@@ -1120,7 +1120,32 @@ function App() {
                   r.effective_volume_m3 ? `${r.effective_volume_m3} m³` : "—",
                   `${r.max_weight_kg} kg`,
                   <Badge value={r.status} />,
-                  can && <button onClick={() => edit(r)}>编辑</button>,
+                  can ? (
+                    <div className="actions">
+                      <button onClick={() => edit(r)}>编辑</button>
+                      <button
+                        className="danger"
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              `确定删除车型“${r.model_name || r.name || r.code}”吗？已被运力或车辆引用的车型不能删除。`,
+                            )
+                          )
+                            return;
+                          try {
+                            await api(`/admin/vehicle-types/${r.id}`, "DELETE");
+                            await done();
+                          } catch (e) {
+                            setError((e as Error).message);
+                          }
+                        }}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ) : (
+                    <span>—</span>
+                  ),
                 ],
           ),
         )}

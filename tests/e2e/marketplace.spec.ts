@@ -173,6 +173,9 @@ test("admin can view the imported 27-row vehicle catalog", async ({ page }) => {
   await expect(page.getByText("13.6-70 米", { exact: true })).toBeVisible({
     timeout: 15000,
   });
+  await expect(
+    page.getByRole("button", { name: "删除", exact: true }).first(),
+  ).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: "test-results/admin-vehicle-catalog.png",

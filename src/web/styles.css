@@ -114,6 +114,19 @@ button.primary {
 button.primary:hover {
   background: #103d33;
 }
+button.danger {
+  color: #a33c34;
+  border-color: #e7c4c0;
+  background: #fff8f7;
+}
+button.danger:hover {
+  background: #fff0ee;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .text-button {
   padding: 6px 0;
   background: transparent !important;

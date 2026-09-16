@@ -917,6 +917,43 @@ for (const [path, table, schema] of [
     return c.json({ id });
   });
 }
+app.delete("/api/admin/vehicle-types/:id", async (c) => {
+  const u = c.get("user");
+  roles(u, masters);
+  const id = c.req.param("id");
+  const before = await c.env.DB.prepare("SELECT * FROM vehicle_types WHERE id=?")
+    .bind(id)
+    .first<Record<string, unknown>>();
+  if (!before) throw new Problem(404, "车型不存在");
+
+  const references = await c.env.DB.prepare(
+    "SELECT (SELECT COUNT(*) FROM capacity_offers WHERE vehicle_type_id=?) AS offers, (SELECT COUNT(*) FROM vehicles WHERE vehicle_type_id=?) AS vehicles",
+  )
+    .bind(id, id)
+    .first<{ offers: number; vehicles: number }>();
+  if (Number(references?.offers ?? 0) > 0 || Number(references?.vehicles ?? 0) > 0)
+    throw new Problem(409, "车型已被运力或车辆引用，不能删除，请改为停用");
+
+  const result = await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM vehicle_types WHERE id=? AND updated_at=? RETURNING id").bind(
+      id,
+      before.updated_at,
+    ),
+    audit(
+      c.env.DB,
+      u,
+      "vehicle_types",
+      id,
+      "DELETE",
+      before,
+      null,
+      c.req.header("cf-connecting-ip") ?? null,
+      true,
+    ),
+  ]);
+  if (!result[0].results.length) throw new Problem(409, "数据已变化，请刷新");
+  return c.json({ id, status: "DELETED" });
+});
 app.all("/api/*", (c) => c.json({ error: "接口不存在" }, 404));
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 export default app;
