@@ -101,7 +101,8 @@ CREATE TABLE audit_logs (
 CREATE INDEX audit_object ON audit_logs(object_type,object_id,created_at);
 -- statement
 CREATE TRIGGER order_reserve_capacity BEFORE INSERT ON orders BEGIN
- SELECT CASE WHEN NOT EXISTS (
+ -- Parenthesize CASE so D1's remote splitter does not confuse CASE END with trigger END.
+ SELECT (CASE WHEN NOT EXISTS (
   SELECT 1 FROM capacity_offers c JOIN routes r ON r.id=c.route_id JOIN vehicle_types v ON v.id=c.vehicle_type_id JOIN carriers ca ON ca.id=c.carrier_id JOIN customer_companies cc ON cc.id=NEW.customer_company_id JOIN users u ON u.id=NEW.customer_user_id
   WHERE c.id=NEW.capacity_offer_id AND c.status='AVAILABLE' AND c.remaining_capacity>=NEW.vehicle_count
   AND c.valid_until>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND c.loading_date>=date('now')
@@ -109,9 +110,9 @@ CREATE TRIGGER order_reserve_capacity BEFORE INSERT ON orders BEGIN
   AND NEW.carrier_id=c.carrier_id AND NEW.route_id=r.id AND NEW.vehicle_type_id=v.id AND NEW.planned_loading_date=c.loading_date
   AND NEW.carrier_unit_price_snapshot=c.carrier_price_cents AND NEW.service_fee_snapshot=r.service_fee_cents AND NEW.deposit_rate_snapshot=r.deposit_rate_bps
   AND NEW.cargo_weight_kg<=v.max_weight_kg AND NEW.cargo_length_cm<=v.max_length_cm AND NEW.cargo_width_cm<=v.max_width_cm AND NEW.cargo_height_cm<=v.max_height_cm
- ) THEN RAISE(ABORT,'CAPACITY_UNAVAILABLE_OR_CHANGED') END;
+ ) THEN RAISE(ABORT,'CAPACITY_UNAVAILABLE_OR_CHANGED') END);
  UPDATE capacity_offers SET remaining_capacity=remaining_capacity-NEW.vehicle_count,
-  status=CASE WHEN remaining_capacity=NEW.vehicle_count THEN 'SOLD_OUT' ELSE 'AVAILABLE' END,
+  status=(CASE WHEN remaining_capacity=NEW.vehicle_count THEN 'SOLD_OUT' ELSE 'AVAILABLE' END),
   updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=NEW.capacity_offer_id;
 END;
 -- statement
